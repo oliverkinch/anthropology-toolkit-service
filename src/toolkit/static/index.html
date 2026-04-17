@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en" x-data="app()" x-init="init()">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ethnograph — Qualitative Analysis Workbench</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen font-sans">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+    <div>
+      <h1 class="text-xl font-semibold tracking-tight">Ethnograph</h1>
+      <p class="text-xs text-gray-500">Qualitative Analysis Workbench</p>
+    </div>
+    <!-- Tab nav -->
+    <nav class="flex gap-1">
+      <template x-for="(tab, idx) in tabs" :key="tab.id">
+        <button
+          @click="currentTab = tab.id"
+          :class="currentTab === tab.id
+            ? 'bg-gray-900 text-white'
+            : 'text-gray-600 hover:bg-gray-100'"
+          class="px-4 py-1.5 rounded text-sm font-medium transition-colors"
+          x-text="tab.label"
+        ></button>
+      </template>
+    </nav>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-6 py-8 space-y-6">
+
+    <!-- ================================================================ -->
+    <!-- TAB 1: UPLOAD                                                     -->
+    <!-- ================================================================ -->
+    <div x-show="currentTab === 'upload'" x-cloak>
+
+      <!-- Upload documents -->
+      <section class="card">
+        <h2 class="section-title mb-4">Upload Documents</h2>
+        <div class="grid grid-cols-3 gap-4">
+
+          <div class="upload-slot" @click="$refs.transcriptInput.click()" @dragover.prevent @drop.prevent="handleDrop($event, 'transcript')">
+            <input type="file" x-ref="transcriptInput" class="hidden" multiple accept=".txt,.docx,.pdf"
+              @change="handleFileInput($event, 'transcript')" />
+            <div class="upload-icon">📄</div>
+            <p class="font-medium text-sm">Interview Transcript(s)</p>
+            <p class="text-xs text-gray-400">txt, docx, pdf — multiple files</p>
+            <ul class="mt-2 space-y-0.5 w-full">
+              <template x-for="f in uploads.filter(u => u.role === 'transcript')" :key="f.filename">
+                <li class="uploaded-file">
+                  <span class="truncate" x-text="f.filename"></span>
+                  <span class="text-gray-400 ml-1 shrink-0" x-text="f.word_count + 'w'"></span>
+                </li>
+              </template>
+            </ul>
+          </div>
+
+          <div class="upload-slot" @click="$refs.guideInput.click()" @dragover.prevent @drop.prevent="handleDrop($event, 'guide')">
+            <input type="file" x-ref="guideInput" class="hidden" accept=".txt,.docx,.pdf"
+              @change="handleFileInput($event, 'guide')" />
+            <div class="upload-icon">📋</div>
+            <p class="font-medium text-sm">Interview Guide</p>
+            <p class="text-xs text-gray-400">Optional — for deductive coding</p>
+            <ul class="mt-2 space-y-0.5 w-full">
+              <template x-for="f in uploads.filter(u => u.role === 'guide')" :key="f.filename">
+                <li class="uploaded-file"><span class="truncate" x-text="f.filename"></span></li>
+              </template>
+            </ul>
+          </div>
+
+          <div class="upload-slot" @click="$refs.litInput.click()" @dragover.prevent @drop.prevent="handleDrop($event, 'literature')">
+            <input type="file" x-ref="litInput" class="hidden" multiple accept=".txt,.docx,.pdf"
+              @change="handleFileInput($event, 'literature')" />
+            <div class="upload-icon">📚</div>
+            <p class="font-medium text-sm">Source Literature</p>
+            <p class="text-xs text-gray-400">Optional — for codebook builder</p>
+            <ul class="mt-2 space-y-0.5 w-full">
+              <template x-for="f in uploads.filter(u => u.role === 'literature')" :key="f.filename">
+                <li class="uploaded-file"><span class="truncate" x-text="f.filename"></span></li>
+              </template>
+            </ul>
+          </div>
+
+        </div>
+      </section>
+
+      <div class="flex justify-end mt-4">
+        <button @click="currentTab='chunking'" :disabled="uploads.filter(u=>u.role==='transcript').length === 0" class="btn-primary">
+          Continue to Chunking →
+        </button>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- TAB 2: CHUNKING                                                   -->
+    <!-- ================================================================ -->
+    <div x-show="currentTab === 'chunking'" x-cloak>
+      <section class="card">
+        <h2 class="section-title mb-4">Chunking Options</h2>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="field-label">Method</label>
+            <select x-model="chunkOpts.method" class="field-input">
+              <option value="llm">LLM-based (recommended)</option>
+              <option value="embeddings">Embedding-based (no extra API calls)</option>
+            </select>
+          </div>
+          <div x-show="chunkOpts.method === 'embeddings'">
+            <label class="field-label">Similarity threshold</label>
+            <input x-model.number="chunkOpts.similarity_threshold" type="range" min="0.1" max="0.9" step="0.05" class="w-full" />
+            <span class="text-xs text-gray-500" x-text="chunkOpts.similarity_threshold"></span>
+          </div>
+          <div>
+            <label class="field-label">Min sentences / chunk</label>
+            <input x-model.number="chunkOpts.min_sentences" type="number" min="1" max="5" class="field-input" />
+          </div>
+          <div>
+            <label class="field-label">Max sentences / chunk</label>
+            <input x-model.number="chunkOpts.max_sentences" type="number" min="2" max="20" class="field-input" />
+          </div>
+          <div class="flex items-center gap-4 col-span-2">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" x-model="chunkOpts.remove_timestamps" class="rounded" />
+              Remove timestamps
+            </label>
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" x-model="chunkOpts.preserve_speakers" class="rounded" />
+              Preserve speaker labels
+            </label>
+          </div>
+        </div>
+        <div class="flex items-center gap-4 mt-4">
+          <button @click="runChunking()" :disabled="chunkRunning" class="btn-primary">
+            <span x-show="!chunkRunning">Run Chunking</span>
+            <span x-show="chunkRunning">Running…</span>
+          </button>
+          <a x-show="chunks.length > 0" href="/api/chunk/download" class="btn-secondary">Download Excel</a>
+        </div>
+        <div x-show="chunkLog.length" class="log-box mt-4">
+          <template x-for="line in chunkLog" :key="line"><div x-text="line"></div></template>
+        </div>
+      </section>
+
+      <section x-show="chunks.length > 0" class="card mt-4">
+        <h2 class="section-title mb-3">Preview <span class="text-gray-400 font-normal text-sm" x-text="'(' + chunks.length + ' chunks)'"></span></h2>
+        <div class="overflow-auto max-h-96">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase">
+              <tr><th class="px-3 py-2 w-12">#</th><th class="px-3 py-2">Speaker</th><th class="px-3 py-2">Text</th></tr>
+            </thead>
+            <tbody>
+              <template x-for="c in chunks.slice(0, 20)" :key="c.chunk_id">
+                <tr class="border-t border-gray-100 hover:bg-gray-50">
+                  <td class="px-3 py-2 text-gray-400" x-text="c.chunk_id"></td>
+                  <td class="px-3 py-2 text-gray-500 whitespace-nowrap" x-text="c.speaker || '—'"></td>
+                  <td class="px-3 py-2" x-text="c.text.slice(0, 200) + (c.text.length > 200 ? '…' : '')"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="flex justify-end mt-4">
+        <button @click="currentTab='coding'" :disabled="chunks.length === 0" class="btn-primary">
+          Continue to Coding →
+        </button>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- TAB 3: CODING                                                     -->
+    <!-- ================================================================ -->
+    <div x-show="currentTab === 'coding'" x-cloak>
+      <section class="card">
+        <h2 class="section-title mb-4">Codebook Source</h2>
+        <div class="space-y-2">
+          <label class="radio-option" :class="codebookSource==='custom' ? 'ring-2 ring-gray-800' : ''">
+            <input type="radio" x-model="codebookSource" value="custom" class="mr-2" />
+            <span class="font-medium">Write custom deductive codes</span>
+          </label>
+          <label class="radio-option" :class="codebookSource==='guide' ? 'ring-2 ring-gray-800' : ''" x-show="uploads.filter(u=>u.role==='guide').length > 0">
+            <input type="radio" x-model="codebookSource" value="guide" class="mr-2" />
+            <span class="font-medium">Extract codes from interview guide</span>
+          </label>
+          <label class="radio-option" :class="codebookSource==='literature' ? 'ring-2 ring-gray-800' : ''" x-show="uploads.filter(u=>u.role==='literature').length > 0">
+            <input type="radio" x-model="codebookSource" value="literature" class="mr-2" />
+            <span class="font-medium">Build codebook from uploaded literature</span>
+          </label>
+          <label class="radio-option" :class="codebookSource==='import' ? 'ring-2 ring-gray-800' : ''">
+            <input type="radio" x-model="codebookSource" value="import" class="mr-2" />
+            <span class="font-medium">Import existing codebook CSV</span>
+          </label>
+        </div>
+
+        <!-- Custom codes textarea -->
+        <div x-show="codebookSource === 'custom'" class="mt-4">
+          <label class="field-label">One code per line: <code>LABEL: definition</code></label>
+          <textarea x-model="customCodesText" rows="6" class="field-input font-mono text-sm"
+            placeholder="methodology: Describes the research methods used&#10;reflexivity: Researcher awareness of own positionality&#10;power_dynamics: Power relations between participants"></textarea>
+          <button @click="saveCustomCodes()" class="btn-primary mt-2">Save Codes</button>
+          <span x-show="codebookSaved" class="ml-3 text-sm text-green-600">✓ Saved</span>
+        </div>
+
+        <!-- Guide extraction -->
+        <div x-show="codebookSource === 'guide'" class="mt-4">
+          <p class="text-sm text-gray-600 mb-2">The LLM will analyse your interview guide and extract deductive codes. Near-duplicates are automatically merged.</p>
+          <button @click="buildCodebookFromGuide()" :disabled="codebookBuilding" class="btn-primary">
+            <span x-show="!codebookBuilding">Extract Codes from Guide</span>
+            <span x-show="codebookBuilding">Extracting…</span>
+          </button>
+        </div>
+
+        <!-- Literature build -->
+        <div x-show="codebookSource === 'literature'" class="mt-4">
+          <p class="text-sm text-gray-600 mb-2">Build a codebook from your uploaded source literature using the AI Codebook Builder pipeline.</p>
+          <button @click="buildCodebookFromLiterature()" :disabled="codebookBuilding" class="btn-primary">
+            <span x-show="!codebookBuilding">Build Codebook</span>
+            <span x-show="codebookBuilding">Building…</span>
+          </button>
+        </div>
+
+        <!-- CSV import -->
+        <div x-show="codebookSource === 'import'" class="mt-4">
+          <input type="file" x-ref="codebookImport" class="hidden" accept=".csv" @change="importCodebook($event)" />
+          <button @click="$refs.codebookImport.click()" class="btn-primary">Choose CSV…</button>
+          <span x-show="codebookSaved" class="ml-3 text-sm text-green-600">✓ Imported</span>
+        </div>
+
+        <div x-show="codebookLog.length" class="log-box mt-3">
+          <template x-for="line in codebookLog" :key="line"><div x-text="line"></div></template>
+        </div>
+
+        <!-- Active codebook preview + downloads -->
+        <div x-show="Object.keys(codebook).length > 0" class="mt-4 border-t border-gray-100 pt-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold text-green-700">
+              ✓ Active codebook — <span x-text="Object.keys(codebook).length"></span> codes ready for coding
+            </h3>
+            <div class="flex gap-2">
+              <a href="/api/codebook/download" class="btn-secondary text-xs py-1">CSV</a>
+              <a href="/api/codebook/download/markdown" class="btn-secondary text-xs py-1">Markdown</a>
+              <a href="/api/codebook/download/atlas" class="btn-secondary text-xs py-1">ATLAS.ti</a>
+              <a href="/api/codebook/download/nvivo" class="btn-secondary text-xs py-1">NVivo</a>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <template x-for="key in Object.keys(codebook)" :key="key">
+              <span class="code-chip" x-text="key"></span>
+            </template>
+          </div>
+        </div>
+      </section>
+
+      <section class="card mt-4">
+        <h2 class="section-title mb-4">Coding Approach</h2>
+        <div class="flex gap-3">
+          <label class="radio-option flex-1" :class="approach==='hybrid' ? 'ring-2 ring-gray-800' : ''">
+            <input type="radio" x-model="approach" value="hybrid" class="mr-2" />
+            <div><p class="font-medium">Hybrid</p><p class="text-xs text-gray-500">Deductive + discover emergent codes</p></div>
+          </label>
+          <label class="radio-option flex-1" :class="approach==='deductive' ? 'ring-2 ring-gray-800' : ''">
+            <input type="radio" x-model="approach" value="deductive" class="mr-2" />
+            <div><p class="font-medium">Deductive only</p><p class="text-xs text-gray-500">Apply codebook codes only</p></div>
+          </label>
+          <label class="radio-option flex-1" :class="approach==='inductive' ? 'ring-2 ring-gray-800' : ''">
+            <input type="radio" x-model="approach" value="inductive" class="mr-2" />
+            <div><p class="font-medium">Inductive only</p><p class="text-xs text-gray-500">Discover all codes from data</p></div>
+          </label>
+        </div>
+        <div class="flex items-center gap-4 mt-4">
+          <button @click="runCoding()" :disabled="codeRunning || (approach !== 'inductive' && Object.keys(codebook).length === 0)" class="btn-primary">
+            <span x-show="!codeRunning">Run Coding</span>
+            <span x-show="codeRunning">Running…</span>
+          </button>
+          <a x-show="codedRows.length > 0" href="/api/code/download" class="btn-secondary">Download Excel</a>
+        </div>
+        <div x-show="codeLog.length" class="log-box mt-3">
+          <template x-for="line in codeLog" :key="line"><div x-text="line"></div></template>
+        </div>
+      </section>
+
+      <section x-show="codedRows.length > 0" class="card mt-4">
+        <h2 class="section-title mb-3">Preview</h2>
+        <div class="overflow-auto max-h-72">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-50 text-left text-gray-500 uppercase">
+              <tr>
+                <th class="px-2 py-1.5">Chunk</th>
+                <th class="px-2 py-1.5">Text</th>
+                <th class="px-2 py-1.5">Deductive</th>
+                <th class="px-2 py-1.5">Inductive</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="r in codedRows" :key="r.chunk_id">
+                <tr class="border-t border-gray-100 hover:bg-gray-50">
+                  <td class="px-2 py-1.5 text-gray-400" x-text="r.chunk_id"></td>
+                  <td class="px-2 py-1.5 max-w-xs truncate" x-text="(r.text || '').slice(0, 120)"></td>
+                  <td class="px-2 py-1.5 text-blue-700" x-text="r.deductive_codes"></td>
+                  <td class="px-2 py-1.5 text-purple-700" x-text="r.inductive_codes"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="flex justify-end mt-4">
+        <button @click="currentTab='analysis'" :disabled="codedRows.length === 0" class="btn-primary">
+          Continue to Analysis →
+        </button>
+      </div>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- TAB 4: ANALYSIS                                                   -->
+    <!-- ================================================================ -->
+    <div x-show="currentTab === 'analysis'" x-cloak>
+      <section class="card">
+        <h2 class="section-title mb-3">Thematic Analysis</h2>
+        <div class="flex items-center gap-4">
+          <button @click="runThemes()" :disabled="themesRunning" class="btn-primary">
+            <span x-show="!themesRunning">Generate Thematic Analysis</span>
+            <span x-show="themesRunning">Generating…</span>
+          </button>
+          <a x-show="themes" href="/api/code/themes/download" class="btn-secondary">Download Word</a>
+        </div>
+        <div x-show="themeLog.length" class="log-box mt-3">
+          <template x-for="line in themeLog" :key="line"><div x-text="line"></div></template>
+        </div>
+      </section>
+
+      <section x-show="themes" class="card mt-4">
+        <pre class="whitespace-pre-wrap text-sm leading-relaxed" x-text="themes"></pre>
+      </section>
+    </div>
+
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

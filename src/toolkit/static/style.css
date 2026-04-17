@@ -1,0 +1,127 @@
+/* Tailwind CDN is used in HTML — this file contains plain CSS overrides only. */
+[x-cloak] { display: none !important; }
+
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+}
+
+.section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #4b5563;
+  margin-bottom: 0.25rem;
+}
+
+.field-input {
+  display: block;
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background: #fff;
+  box-sizing: border-box;
+}
+.field-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #d1d5db;
+}
+
+.btn-primary {
+  background: #111827;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-primary:hover:not(:disabled) { background: #374151; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-secondary {
+  display: inline-block;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-secondary:hover { background: #f9fafb; }
+
+.upload-slot {
+  border: 2px dashed #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  min-height: 9rem;
+  transition: border-color 0.15s;
+}
+.upload-slot:hover { border-color: #9ca3af; }
+
+.upload-icon { font-size: 1.875rem; margin-bottom: 0.5rem; }
+
+.uploaded-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  color: #374151;
+}
+
+.radio-option {
+  display: flex;
+  align-items: flex-start;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.radio-option:hover { background: #f9fafb; }
+
+.code-chip {
+  font-size: 0.75rem;
+  background: #f3f4f6;
+  color: #374151;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+  font-family: monospace;
+}
+
+.log-box {
+  background: #111827;
+  color: #d1d5db;
+  font-size: 0.75rem;
+  font-family: monospace;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  max-height: 10rem;
+  overflow-y: auto;
+}

@@ -1,0 +1,67 @@
+Belonging, Place and the Politics of Urban Space: A Review of Contemporary Anthropological Approaches
+
+Abstract
+
+This paper reviews key theoretical frameworks in the anthropological study of urban belonging and place identity, with particular attention to the intersections of spatial practice, social exclusion, and identity negotiation in contexts of rapid urban change. Drawing on ethnographic and qualitative traditions, we examine how scholars have theorised the relationship between physical space and subjective experiences of home, community, and displacement. We argue that belonging is best understood not as a stable attribute of persons or places, but as an ongoing, contested, and relational process.
+
+1. Introduction
+
+The city has long served as the primary site for anthropological enquiry into modernity, social heterogeneity, and the transformation of collective life. From the foundational urban sociology of the Chicago School to contemporary ethnographies of gentrification and migration, scholars have repeatedly returned to the question of how individuals and communities construct meaningful attachments to urban places that are perpetually in flux. In recent decades, the concept of belonging has emerged as a central organising framework for these investigations, offering a vocabulary that bridges subjective experience, social structure, and spatial practice.
+
+Belonging refers, in its most basic formulation, to the felt sense of being at home in a particular social or physical setting. Yet as Probyn (1996) and Yuval-Davis (2006) have argued, this apparently simple feeling is in fact deeply political: it is produced through inclusion and exclusion, through the attribution of legitimacy to certain presences and the delegitimisation of others. To belong is always, implicitly, to be recognised as belonging by others — and this recognition is unevenly distributed along axes of race, class, gender, and national origin.
+
+2. Theoretical Frameworks
+
+2.1 Place Identity and Attachment
+
+The concept of place identity, introduced by Proshansky and colleagues (1983), posits that the physical environments in which people live and act become incorporated into the self-concept. Place is not merely a backdrop to social action but an active constituent of identity. Tuan's (1977) phenomenological account of topophilia — the affective bonds between people and places — established a humanist tradition of enquiry that continues to inform ethnographic studies of home, neighbourhood, and belonging.
+
+More recent scholarship has complicated these accounts by attending to the ways in which place attachment is differentially accessible. For communities subject to forced relocation, gentrification, or chronic disinvestment, the cultivation of place identity may be disrupted or foreclosed (Fullilove, 2004). The experience of displacement is not merely spatial but ontological: it undermines the conditions of possibility for selfhood and community.
+
+2.2 Spatial Practice and Everyday Life
+
+De Certeau's (1984) distinction between strategies and tactics offers a productive lens for understanding how ordinary urban inhabitants negotiate spaces that are produced and regulated by institutional and economic powers. Where strategies are the spatial practices of those with established places of their own — planners, developers, state actors — tactics are the improvisational, opportunistic practices through which the less powerful make use of the spaces available to them. This framework has been widely adopted in ethnographic studies of urban marginality, where researchers have documented the creative and often subversive ways in which excluded groups claim presence in hostile environments.
+
+Lefebvre's (1991) tripartite model of social space — comprising spatial practice, representations of space, and representational spaces — provides a complementary analytical vocabulary. His insistence that space is produced through social relations, rather than simply inhabited, directs attention to the power dynamics embedded in seemingly neutral architectural and urban forms. The design of a public plaza, the pricing of a café, the distribution of green space across neighbourhoods — each of these encodes and reproduces social hierarchies.
+
+2.3 Belonging as Relational Achievement
+
+Drawing on symbolic interactionist traditions, a number of anthropologists have conceptualised belonging not as a property of individuals but as a relational achievement produced in interaction. Blokland (2003), in her comparative ethnography of Rotterdam neighbourhoods, argues that the sense of community — and by extension, of belonging — is constructed through specific practices of narration and memory-sharing. To be part of a neighbourhood is partly to share in its stories, to know its history, to recognise and be recognised.
+
+This relational perspective has important methodological implications. It suggests that belonging cannot be adequately studied through survey instruments or demographic proxies, but requires qualitative, participatory approaches that attend to the situated, intersubjective processes through which it is produced. The ethnographic interview, in particular, offers a distinctive form of access to the temporal and narrative dimensions of belonging: how people account for their relationship to place over time, how they situate themselves within the social geography of the city.
+
+2.4 Intersectionality and Differential Belonging
+
+Contemporary anthropological accounts have increasingly attended to the ways in which belonging is structured by intersecting social categories. Crenshaw's (1991) framework of intersectionality, originally developed in legal scholarship, has been productively extended to spatial and ethnographic contexts. Research has demonstrated that the capacity to claim belonging in urban spaces is differentially distributed: white, middle-class residents typically enjoy unquestioned spatial citizenship, while racialised, working-class, or migrant inhabitants may find their presence repeatedly questioned, surveilled, or actively contested (Wacquant, 2008; Skeggs, 2004).
+
+Gentrification is a particularly salient context for these dynamics. As capital investment reshapes urban neighbourhoods, the aesthetic, social, and economic character of public and semi-public space shifts in ways that signal inclusion to some and exclusion to others. The proliferation of specialty coffee shops, artisanal markets, and boutique gyms in formerly working-class areas is not merely a change in consumption landscape; it is a reconfiguration of whose presence is welcomed and whose is rendered uncomfortable or invisible (Lees, Slater and Wyly, 2008).
+
+3. Methodological Considerations
+
+The study of urban belonging poses distinctive methodological challenges. The phenomenological dimensions of place attachment — the felt sense of home, the bodily ease or discomfort in particular spaces — are not readily accessible through conventional social science methods. Ethnographic approaches, including extended participant observation, in-depth interviewing, and what Low (2017) terms "embodied space" methods, are particularly well suited to capturing the textures of belonging as it is lived and negotiated.
+
+Interview-based research requires particular attention to the co-construction of narrative: the researcher's presence, identity, and framing actively shape the accounts that interviewees produce. Reflexivity — the sustained critical examination of the researcher's own positionality and its effects on the research process — is thus not merely an ethical obligation but an epistemological necessity. The researcher who shares ethnic or class background with interviewees will have access to different dimensions of experience than one who does not; neither position is unmediated or innocent.
+
+Qualitative coding schemes developed for analysing interview data in this domain typically attend to a set of recurring themes: experiences of inclusion and exclusion, practices of community-making, perceptions of change, narratives of displacement and return, and accounts of conflict and negotiation across lines of difference. These themes are not mutually exclusive, and effective analysis requires attention to their interactions and tensions.
+
+4. Conclusion
+
+The anthropological study of urban belonging is at once an empirical and a theoretical project. It seeks to understand how specific individuals and communities, located in particular places at particular historical moments, navigate the contested terrain of urban life. But it also participates in broader theoretical debates about the relationship between space and identity, the politics of recognition, and the possibilities and limits of solidarity across difference.
+
+As cities continue to be reshaped by capital flows, demographic change, and political contestation, these questions become ever more pressing. The ethnographic tradition offers resources — conceptual, methodological, and ethical — that remain essential for understanding the human dimensions of urban transformation.
+
+References
+
+Blokland, T. (2003). Urban Bonds: Social Relationships in an Inner City Neighbourhood. Polity Press.
+Crenshaw, K. (1991). Mapping the margins: Intersectionality, identity politics, and violence against women of color. Stanford Law Review, 43(6), 1241–1299.
+De Certeau, M. (1984). The Practice of Everyday Life. University of California Press.
+Fullilove, M.T. (2004). Root Shock: How Tearing Up City Neighborhoods Hurts America. Ballantine Books.
+Lees, L., Slater, T. and Wyly, E. (2008). Gentrification. Routledge.
+Lefebvre, H. (1991). The Production of Space. Blackwell.
+Low, S. (2017). Spatializing Culture: The Ethnography of Space and Place. Routledge.
+Probyn, E. (1996). Outside Belongings. Routledge.
+Proshansky, H.M., Fabian, A.K. and Kaminoff, R. (1983). Place-identity: Physical world socialisation of the self. Journal of Environmental Psychology, 3(1), 57–83.
+Skeggs, B. (2004). Class, Self, Culture. Routledge.
+Tuan, Y.-F. (1977). Space and Place: The Perspective of Experience. University of Minnesota Press.
+Wacquant, L. (2008). Urban Outcasts: A Comparative Sociology of Advanced Marginality. Polity Press.
+Yuval-Davis, N. (2006). Belonging and the politics of belonging. Patterns of Prejudice, 40(3), 197–214.

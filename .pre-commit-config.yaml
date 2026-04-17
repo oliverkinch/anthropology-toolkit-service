@@ -1,0 +1,33 @@
+repos:
+  # Ruff: linting + formatting (replaces flake8, isort, pyupgrade, black)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.11
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Mypy: static type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.15.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2
+          - pydantic-settings>=2
+          - fastapi>=0.115
+          - types-pyyaml
+        args: [--ignore-missing-imports, --no-strict-optional]
+
+  # General hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict     # catch leftover <<< markers
+      - id: check-toml               # validate pyproject.toml
+      - id: check-yaml               # validate YAML files
+      - id: end-of-file-fixer        # ensure files end with a newline
+      - id: trailing-whitespace      # strip trailing spaces
+      - id: mixed-line-ending        # normalise CRLF → LF
+      - id: no-commit-to-branch      # block direct commits to main
+        args: [--branch, main]

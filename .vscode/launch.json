@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run service",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["toolkit.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
+      "python": "${workspaceFolder}/.venv/bin/python3",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "cwd": "${workspaceFolder}",
+      "jinja": false,
+      "console": "integratedTerminal"
+    }
+  ]
+}
