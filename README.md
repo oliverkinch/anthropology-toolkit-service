@@ -36,7 +36,7 @@ DEFAULT_MODEL=qwen-235b
 uv run serve
 ```
 
-Opens at **http://localhost:8000**. Hot-reload is enabled by default.
+Opens at **http://localhost:8080**. Hot-reload is enabled by default.
 
 ## Workflow
 
@@ -101,6 +101,16 @@ src/toolkit/
 └── static/              # Frontend (Alpine.js + Tailwind CDN)
 ```
 
-## Docker (later)
+## Deployment
 
-A `docker-compose.yml` can be added to expose the service on a fixed URL. The app reads all configuration from environment variables, so no code changes are needed.
+The service is hosted at **https://insights-tools.alexandrainst.dk/** on port 8080.
+
+Build and start with Docker Compose:
+
+```bash
+cp .env.example .env
+# Fill in INFERENCE_API_KEY in .env
+docker compose up -d --build
+```
+
+The app reads all configuration from environment variables via `.env`. No code changes are needed to switch between local and deployed environments.
