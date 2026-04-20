@@ -43,44 +43,57 @@
         <h2 class="section-title mb-4">Upload Documents</h2>
         <div class="grid grid-cols-3 gap-4">
 
-          <div class="upload-slot" @click="$refs.transcriptInput.click()" @dragover.prevent @drop.prevent="handleDrop($event, 'transcript')">
+          <div class="upload-slot" @dragover.prevent @drop.prevent="handleDrop($event, 'transcript')">
             <input type="file" x-ref="transcriptInput" class="hidden" multiple accept=".txt,.docx,.pdf"
               @change="handleFileInput($event, 'transcript')" />
-            <div class="upload-icon">📄</div>
-            <p class="font-medium text-sm">Interview Transcript(s)</p>
-            <p class="text-xs text-gray-400">txt, docx, pdf — multiple files</p>
+            <div class="cursor-pointer" @click="$refs.transcriptInput.click()">
+              <div class="upload-icon">📄</div>
+              <p class="font-medium text-sm">Interview Transcript(s)</p>
+              <p class="text-xs text-gray-400">txt, docx, pdf — multiple files</p>
+            </div>
             <ul class="mt-2 space-y-0.5 w-full">
-              <template x-for="f in uploads.filter(u => u.role === 'transcript')" :key="f.filename">
+              <template x-for="f in uploads.filter(u => u.role === 'transcript')" :key="f.role + '::' + f.filename">
                 <li class="uploaded-file">
                   <span class="truncate" x-text="f.filename"></span>
                   <span class="text-gray-400 ml-1 shrink-0" x-text="f.word_count + 'w'"></span>
+                  <button type="button" @click="deleteUpload(f.role, f.filename)" class="ml-1 shrink-0 text-gray-300 hover:text-red-500 leading-none" title="Remove">×</button>
                 </li>
               </template>
             </ul>
           </div>
 
-          <div class="upload-slot" @click="$refs.guideInput.click()" @dragover.prevent @drop.prevent="handleDrop($event, 'guide')">
+          <div class="upload-slot" @dragover.prevent @drop.prevent="handleDrop($event, 'guide')">
             <input type="file" x-ref="guideInput" class="hidden" accept=".txt,.docx,.pdf"
               @change="handleFileInput($event, 'guide')" />
-            <div class="upload-icon">📋</div>
-            <p class="font-medium text-sm">Interview Guide</p>
-            <p class="text-xs text-gray-400">Optional — for deductive coding</p>
+            <div class="cursor-pointer" @click="$refs.guideInput.click()">
+              <div class="upload-icon">📋</div>
+              <p class="font-medium text-sm">Interview Guide</p>
+              <p class="text-xs text-gray-400">Optional — for deductive coding</p>
+            </div>
             <ul class="mt-2 space-y-0.5 w-full">
-              <template x-for="f in uploads.filter(u => u.role === 'guide')" :key="f.filename">
-                <li class="uploaded-file"><span class="truncate" x-text="f.filename"></span></li>
+              <template x-for="f in uploads.filter(u => u.role === 'guide')" :key="f.role + '::' + f.filename">
+                <li class="uploaded-file">
+                  <span class="truncate" x-text="f.filename"></span>
+                  <button type="button" @click="deleteUpload(f.role, f.filename)" class="ml-1 shrink-0 text-gray-300 hover:text-red-500 leading-none" title="Remove">×</button>
+                </li>
               </template>
             </ul>
           </div>
 
-          <div class="upload-slot" @click="$refs.litInput.click()" @dragover.prevent @drop.prevent="handleDrop($event, 'literature')">
+          <div class="upload-slot" @dragover.prevent @drop.prevent="handleDrop($event, 'literature')">
             <input type="file" x-ref="litInput" class="hidden" multiple accept=".txt,.docx,.pdf"
               @change="handleFileInput($event, 'literature')" />
-            <div class="upload-icon">📚</div>
-            <p class="font-medium text-sm">Source Literature</p>
-            <p class="text-xs text-gray-400">Optional — for codebook builder</p>
+            <div class="cursor-pointer" @click="$refs.litInput.click()">
+              <div class="upload-icon">📚</div>
+              <p class="font-medium text-sm">Source Literature</p>
+              <p class="text-xs text-gray-400">Optional — for codebook builder</p>
+            </div>
             <ul class="mt-2 space-y-0.5 w-full">
-              <template x-for="f in uploads.filter(u => u.role === 'literature')" :key="f.filename">
-                <li class="uploaded-file"><span class="truncate" x-text="f.filename"></span></li>
+              <template x-for="f in uploads.filter(u => u.role === 'literature')" :key="f.role + '::' + f.filename">
+                <li class="uploaded-file">
+                  <span class="truncate" x-text="f.filename"></span>
+                  <button type="button" @click="deleteUpload(f.role, f.filename)" class="ml-1 shrink-0 text-gray-300 hover:text-red-500 leading-none" title="Remove">×</button>
+                </li>
               </template>
             </ul>
           </div>
@@ -311,7 +324,7 @@
       </section>
 
       <div class="flex justify-end mt-4">
-        <button @click="currentTab='analysis'" :disabled="codedRows.length === 0" class="btn-primary">
+        <button @click="currentTab='analysis'" class="btn-primary">
           Continue to Analysis →
         </button>
       </div>

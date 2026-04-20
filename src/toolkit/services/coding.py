@@ -273,25 +273,25 @@ async def build_themes(
     top_ind_str = "\n".join(f"  {code}: {freq}" for code, freq in top_ind)
 
     theme_prompt = (
-        "You are a qualitative research expert building THEMES from mixed-method coding results.\n\n"
-        f"CODING OVERVIEW:\n"
-        f"- Total code applications: {len(all_codes)}\n"
-        f"- Unique codes: {len(set(all_codes))}\n\n"
-        f"TOP DEDUCTIVE CODES:\n{top_ded_str}\n\n"
-        f"TOP INDUCTIVE CODES:\n{top_ind_str}\n\n"
-        f"SAMPLE CODED CHUNKS:\n{sample_text}\n\n"
-        "TASK: Create 5-7 HIERARCHICAL THEMES that:\n"
-        "1. Integrate insights from both deductive and inductive codes\n"
-        "2. Have clear main themes with 2-3 sub-themes each\n"
-        "3. Are actionable and relevant\n\n"
-        "Format each theme as:\n\n"
-        "THEME [Number]: [Clear, Descriptive Name]\n"
-        "Core Concept: [2-3 sentences explaining what this theme captures]\n"
-        "Sub-themes:\n"
-        "  a) [Sub-theme name]: [Brief description]\n"
-        "  b) [Sub-theme name]: [Brief description]\n"
-        "Key Finding: [The main insight this theme reveals]\n"
-        "Evidence Strength: [Strong/Moderate/Emerging - based on frequency]"
+        "Du er en ekspert i kvalitativ forskning og skal opbygge TEMAER ud fra mixed-method kodningsresultater.\n\n"
+        f"KODNINGSOVERSIGT:\n"
+        f"- Antal kodeappliceringer i alt: {len(all_codes)}\n"
+        f"- Unikke koder: {len(set(all_codes))}\n\n"
+        f"TOP DEDUKTIVE KODER:\n{top_ded_str}\n\n"
+        f"TOP INDUKTIVE KODER:\n{top_ind_str}\n\n"
+        f"EKSEMPEL PÅ KODEDE UDDRAG:\n{sample_text}\n\n"
+        "OPGAVE: Udarbejd 5-7 HIERARKISKE TEMAER, som:\n"
+        "1. Integrerer indsigter fra både deduktive og induktive koder\n"
+        "2. Har klare hovedtemaer med 2-3 undertemaer hver\n"
+        "3. Er handlingsorienterede og relevante\n\n"
+        "Skriv svaret på DANSK. Formater hvert tema som:\n\n"
+        "TEMA [Nummer]: [Klart og beskrivende navn]\n"
+        "Kernekonceptet: [2-3 sætninger der forklarer, hvad temaet indfanger]\n"
+        "Undertemaer:\n"
+        "  a) [Undertema navn]: [Kort beskrivelse]\n"
+        "  b) [Undertema navn]: [Kort beskrivelse]\n"
+        "Nøglefund: [Den vigtigste indsigt dette tema afslører]\n"
+        "Evidensstyrke: [Stærk/Moderat/Fremvoksende - baseret på kodehyppighed]"
     )
 
     yield f"data: {json.dumps({'type': 'progress', 'message': 'Generating thematic analysis...'})}\n\n"
@@ -322,8 +322,11 @@ def merge_coding_results(
     deductive_results: list[dict],
     inductive_results: list[dict],
 ) -> pd.DataFrame:
+    import datetime
+
     ded_map = {r["chunk_id"]: r["deductive_codes"] for r in deductive_results}
     ind_map = {r["chunk_id"]: r["inductive_codes"] for r in inductive_results}
+    timestamp = datetime.datetime.now().isoformat()
 
     rows = []
     for c in chunks:
@@ -331,11 +334,26 @@ def merge_coding_results(
         ded = ded_map.get(cid, [])
         ind = ind_map.get(cid, [])
         all_codes = ded + ind
+        text = c["text"]
+        words = text.split()
+        word_count = len(words)
+        try:
+            import nltk
+
+            sentence_count = len(nltk.sent_tokenize(text)) if text else 0
+        except Exception:
+            sentence_count = text.count(".") + text.count("?") + text.count("!") or 1
         rows.append(
             {
                 "chunk_id": cid,
-                "text": c["text"],
+                "text": text,
+                "word_count": word_count,
+                "char_count": len(text),
+                "sentence_count": sentence_count,
                 "speaker": c.get("speaker", ""),
+                "avg_words_per_sentence": round(word_count / sentence_count, 1) if sentence_count else 0,
+                "source_file": c.get("source_file", ""),
+                "processed_timestamp": timestamp,
                 "deductive_codes": ", ".join(ded),
                 "inductive_codes": ", ".join(ind),
                 "all_codes": ", ".join(all_codes),
@@ -356,34 +374,107 @@ def _coding_status(ded: list, ind: list) -> str:
     return "No codes"
 
 
-def save_coding_results(df: pd.DataFrame, session_path: Path) -> Path:
+def save_coding_results(
+    df: pd.DataFrame,
+    session_path: Path,
+    codebook: dict | None = None,
+    inductive_codes: dict | None = None,
+) -> Path:
     out = session_path / "coded_data.xlsx"
-    freq: Counter[str] = Counter()
-    for codes_str in df["all_codes"]:
-        for c in (codes_str or "").split(","):
+
+    # Code frequencies with type annotation
+    ded_freq: Counter[str] = Counter()
+    ind_freq: Counter[str] = Counter()
+    for _, row in df.iterrows():
+        for c in (row.get("deductive_codes") or "").split(","):
             c = c.strip()
             if c:
-                freq[c] += 1
+                ded_freq[c] += 1
+        for c in (row.get("inductive_codes") or "").split(","):
+            c = c.strip()
+            if c:
+                ind_freq[c] += 1
 
-    freq_df = pd.DataFrame([{"code": k, "frequency": v} for k, v in freq.most_common()])
+    freq_rows = [{"Code": k, "Type": "Deductive", "Frequency": v} for k, v in ded_freq.most_common()]
+    freq_rows += [{"Code": k, "Type": "Inductive", "Frequency": v} for k, v in ind_freq.most_common()]
+    freq_rows.sort(key=lambda x: x["Frequency"] if isinstance(x["Frequency"], int) else 0, reverse=True)
+    freq_df = pd.DataFrame(freq_rows)
+
+    # Code co-occurrence (combinations)
+    combo_counter: Counter[str] = Counter()
+    for _, row in df.iterrows():
+        all_c = [c.strip() for c in (row.get("all_codes") or "").split(",") if c.strip()]
+        if len(all_c) >= 2:
+            for i in range(len(all_c)):
+                for j in range(i + 1, len(all_c)):
+                    pair = f"{all_c[i]} + {all_c[j]}"
+                    combo_counter[pair] += 1
+    combo_df = pd.DataFrame([{"Combination": k, "Frequency": v} for k, v in combo_counter.most_common(30)])
+
+    # Deductive codebook sheet
+    if codebook:
+        cb_rows = []
+        for label, code in codebook.items():
+            inc = code.get("inclusion_criteria", [])
+            exc = code.get("exclusion_criteria", [])
+            examples = code.get("examples", [])
+            cb_rows.append(
+                {
+                    "code_label": label,
+                    "definition": code.get("definition", ""),
+                    "inclusion_criteria": "; ".join(inc) if isinstance(inc, list) else inc,
+                    "exclusion_criteria": "; ".join(exc) if isinstance(exc, list) else exc,
+                    "example_1": examples[0] if len(examples) > 0 else "",
+                    "example_2": examples[1] if len(examples) > 1 else "",
+                    "frequency": ded_freq.get(label, 0),
+                }
+            )
+        codebook_df = pd.DataFrame(cb_rows)
+    else:
+        codebook_df = None
+
+    # Inductive codes sheet
+    if inductive_codes:
+        ind_rows = []
+        for code_name, info in inductive_codes.items():
+            ind_rows.append(
+                {
+                    "Code": code_name,
+                    "Definition": info.get("definition", ""),
+                    "Application": info.get("when_to_apply", ""),
+                    "Example": info.get("example", ""),
+                    "Frequency": ind_freq.get(code_name + "_ind", 0),
+                }
+            )
+        ind_df = pd.DataFrame(ind_rows)
+    else:
+        ind_df = None
+
+    summary = pd.DataFrame(
+        {
+            "Metric": ["Total chunks", "Coded chunks", "Deductive only", "Inductive only", "Both", "No codes"],
+            "Count": [
+                len(df),
+                len(df[df["coding_status"] != "No codes"]),
+                len(df[df["coding_status"] == "Deductive"]),
+                len(df[df["coding_status"] == "Inductive"]),
+                len(df[df["coding_status"] == "Both"]),
+                len(df[df["coding_status"] == "No codes"]),
+            ],
+        }
+    )
 
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Coded_Data", index=False)
-        freq_df.to_excel(writer, sheet_name="Code_Frequencies", index=False)
-        summary = pd.DataFrame(
-            {
-                "Metric": ["Total chunks", "Coded chunks", "Deductive only", "Inductive only", "Both", "No codes"],
-                "Count": [
-                    len(df),
-                    len(df[df["coding_status"] != "No codes"]),
-                    len(df[df["coding_status"] == "Deductive"]),
-                    len(df[df["coding_status"] == "Inductive"]),
-                    len(df[df["coding_status"] == "Both"]),
-                    len(df[df["coding_status"] == "No codes"]),
-                ],
-            }
-        )
-        summary.to_excel(writer, sheet_name="Summary", index=False)
+        summary.to_excel(writer, sheet_name="Coding_Summary", index=False)
+        if codebook_df is not None:
+            codebook_df.to_excel(writer, sheet_name="Deductive_Codebook", index=False)
+        if ind_df is not None:
+            ind_df.to_excel(writer, sheet_name="Inductive_Codes", index=False)
+        if not freq_df.empty:
+            freq_df.to_excel(writer, sheet_name="Code_Frequencies", index=False)
+        if not combo_df.empty:
+            combo_df.to_excel(writer, sheet_name="Code_Combinations", index=False)
     return out
 
 
@@ -398,17 +489,17 @@ def save_themes_docx(themes_text: str, session_path: Path) -> Path:
         if not line:
             doc.add_paragraph("")
             continue
-        if re.match(r"^THEME \d+:", line):
+        if re.match(r"^TEMA \d+:", line) or re.match(r"^THEME \d+:", line):
             doc.add_heading(line, level=1)
-        elif re.match(r"^(Core Concept|Key Finding|Evidence Strength):", line):
+        elif re.match(r"^(Kernekonceptet|Nøglefund|Evidensstyrke|Core Concept|Key Finding|Evidence Strength):", line):
             p = doc.add_paragraph()
             p.add_run(line.split(":", 1)[0] + ":").bold = True
             p.add_run(line.split(":", 1)[1] if ":" in line else "")
         elif re.match(r"^\s+[a-z]\)", line):
             doc.add_paragraph(line.strip(), style="List Bullet")
-        elif line == "Sub-themes:":
+        elif line in ("Undertemaer:", "Sub-themes:"):
             p = doc.add_paragraph()
-            p.add_run("Sub-themes:").bold = True
+            p.add_run(line).bold = True
         else:
             doc.add_paragraph(line)
 

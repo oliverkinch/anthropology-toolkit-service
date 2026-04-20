@@ -81,7 +81,7 @@ async def run_coding(
             ]
 
         df = merge_coding_results(chunks, deductive_results, inductive_results)
-        save_coding_results(df, sdir)
+        save_coding_results(df, sdir, codebook=codebook, inductive_codes=inductive_codes)
         df.to_json(sdir / "coded_data.json", orient="records")
         if inductive_codes:
             (sdir / "inductive_codes.json").write_text(json.dumps(inductive_codes))
