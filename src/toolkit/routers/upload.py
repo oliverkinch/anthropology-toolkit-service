@@ -3,7 +3,7 @@
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Cookie, Response, UploadFile
+from fastapi import APIRouter, Cookie, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
 from toolkit.services.file_io import extract_text
@@ -11,7 +11,9 @@ from toolkit.session import get_or_create_session, session_dir
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
-ALLOWED_SUFFIXES = {".txt", ".pdf", ".docx", ".doc"}
+# Files with these suffixes are stored as originals; each gets an extracted .txt cache.
+SOURCE_SUFFIXES = {".pdf", ".docx", ".doc"}
+ALLOWED_SUFFIXES = SOURCE_SUFFIXES | {".txt"}
 
 
 class UploadedFile(BaseModel):
@@ -32,8 +34,6 @@ async def upload_file(
 
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_SUFFIXES:
-        from fastapi import HTTPException
-
         raise HTTPException(400, f"Unsupported file type: {suffix}")
 
     role_dir = sdir / role
@@ -45,7 +45,7 @@ async def upload_file(
     text = extract_text(dest)
     word_count = len(text.split())
 
-    # cache extracted text
+    # Cache extracted text alongside the original
     (role_dir / (dest.stem + ".txt")).write_text(text, encoding="utf-8")
 
     return UploadedFile(filename=file.filename or "upload", role=role, word_count=word_count)
@@ -63,11 +63,16 @@ async def list_uploads(
         role_dir = sdir / role
         if not role_dir.exists():
             continue
-        for f in role_dir.iterdir():
-            if f.suffix.lower() in ALLOWED_SUFFIXES:
-                txt_cache = role_dir / (f.stem + ".txt")
-                wc = len(txt_cache.read_text(encoding="utf-8").split()) if txt_cache.exists() else 0
-                uploads.append(UploadedFile(filename=f.name, role=role, word_count=wc))
+        for f in sorted(role_dir.iterdir()):
+            suffix = f.suffix.lower()
+            if suffix not in ALLOWED_SUFFIXES:
+                continue
+            # Skip .txt files that are extraction caches for a non-txt source
+            if suffix == ".txt" and any((role_dir / (f.stem + s)).exists() for s in SOURCE_SUFFIXES):
+                continue
+            txt_cache = role_dir / (f.stem + ".txt")
+            wc = len(txt_cache.read_text(encoding="utf-8").split()) if txt_cache.exists() else 0
+            uploads.append(UploadedFile(filename=f.name, role=role, word_count=wc))
     return uploads
 
 
@@ -80,6 +85,7 @@ async def delete_upload(
 ) -> dict:
     sid = get_or_create_session(response, session_id)
     sdir = session_dir(sid) / role
-    for f in sdir.glob(f"{filename}*"):
+    stem = Path(filename).stem
+    for f in sdir.glob(f"{stem}*"):
         f.unlink(missing_ok=True)
     return {"ok": True}

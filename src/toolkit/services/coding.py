@@ -1,6 +1,7 @@
 """Coding & thematic analysis — deductive, inductive, and hybrid."""
 
 import asyncio
+import datetime
 import json
 import logging
 import re
@@ -8,6 +9,7 @@ from collections import Counter
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+import nltk
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -243,20 +245,12 @@ async def build_themes(
     yield f"data: {json.dumps({'type': 'progress', 'message': 'Analysing code patterns...'})}\n\n"
     await asyncio.sleep(0)
 
-    all_codes: list[str] = []
-    deductive_codes: list[str] = []
-    inductive_codes: list[str] = []
+    def _split_codes(val) -> list[str]:
+        return [c.strip() for c in str(val or "").split(",") if c.strip()]
 
-    for _, row in df.iterrows():
-        ded = row.get("deductive_codes", []) or []
-        ind = row.get("inductive_codes", []) or []
-        if isinstance(ded, str):
-            ded = [c for c in ded.split(",") if c.strip()]
-        if isinstance(ind, str):
-            ind = [c for c in ind.split(",") if c.strip()]
-        all_codes.extend(ded + ind)
-        deductive_codes.extend(ded)
-        inductive_codes.extend(ind)
+    deductive_codes = [c for v in df["deductive_codes"].fillna("") for c in _split_codes(v)]
+    inductive_codes = [c for v in df["inductive_codes"].fillna("") for c in _split_codes(v)]
+    all_codes = deductive_codes + inductive_codes
 
     top_ded = Counter(deductive_codes).most_common(10)
     top_ind = Counter(inductive_codes).most_common(10)
@@ -322,8 +316,6 @@ def merge_coding_results(
     deductive_results: list[dict],
     inductive_results: list[dict],
 ) -> pd.DataFrame:
-    import datetime
-
     ded_map = {r["chunk_id"]: r["deductive_codes"] for r in deductive_results}
     ind_map = {r["chunk_id"]: r["inductive_codes"] for r in inductive_results}
     timestamp = datetime.datetime.now().isoformat()
@@ -338,11 +330,9 @@ def merge_coding_results(
         words = text.split()
         word_count = len(words)
         try:
-            import nltk
-
             sentence_count = len(nltk.sent_tokenize(text)) if text else 0
         except Exception:
-            sentence_count = text.count(".") + text.count("?") + text.count("!") or 1
+            sentence_count = max(1, text.count(".") + text.count("?") + text.count("!"))
         rows.append(
             {
                 "chunk_id": cid,

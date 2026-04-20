@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -13,7 +14,15 @@ from toolkit.session import cleanup_stale_sessions
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
-app = FastAPI(title="Anthropology Toolkit", version="0.1.0", docs_url="/docs")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Path("tmp").mkdir(exist_ok=True)
+    cleanup_stale_sessions()
+    yield
+
+
+app = FastAPI(title="Anthropology Toolkit", version="0.1.0", docs_url="/docs", lifespan=lifespan)
 
 app.include_router(upload.router)
 app.include_router(chunker.router)
@@ -23,12 +32,6 @@ app.include_router(coding.router)
 # Serve frontend from static/
 _static = Path(__file__).parent / "static"
 app.mount("/", StaticFiles(directory=_static, html=True), name="static")
-
-
-@app.on_event("startup")
-async def startup() -> None:
-    Path("tmp").mkdir(exist_ok=True)
-    cleanup_stale_sessions()
 
 
 def run() -> None:
