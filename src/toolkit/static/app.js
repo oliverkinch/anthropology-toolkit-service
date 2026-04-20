@@ -29,6 +29,7 @@ function app() {
     // Coding
     approach: 'hybrid',
     codedRows: [],
+    codingDone: false,
     codeRunning: false,
     codeLog: [],
 
@@ -217,6 +218,7 @@ function app() {
         if (payload.type === 'inductive_done') this.codeLog.push(`✓ Inductive coding complete`)
         if (payload.type === 'done') {
           this.codedRows = payload.preview || []
+          this.codingDone = true
           this.codeLog.push(`✓ Coded ${payload.total_chunks} chunks`)
           es.close()
           this.codeRunning = false
@@ -227,7 +229,10 @@ function app() {
 
     async loadCodingResults() {
       const res = await fetch('/api/code/results')
-      if (res.ok) this.codedRows = await res.json()
+      if (res.ok) {
+        this.codedRows = await res.json()
+        if (this.codedRows.length > 0) this.codingDone = true
+      }
     },
 
     // ----------------------------------------------------------------
