@@ -224,7 +224,11 @@ function app() {
           this.codeRunning = false
         }
       }
-      es.onerror = () => { this.codeRunning = false; es.close() }
+      es.onerror = async () => {
+        this.codeRunning = false
+        es.close()
+        await this.loadCodingResults()
+      }
     },
 
     async loadCodingResults() {
