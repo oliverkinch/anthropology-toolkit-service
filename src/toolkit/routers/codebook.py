@@ -9,6 +9,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from toolkit.config import settings
+from toolkit.routers._sse import parse_sse
 from toolkit.services.codebook import (
     build_codebook,
     extract_codes_from_guide,
@@ -53,12 +54,10 @@ async def build_from_literature(
         client = AsyncOpenAI(base_url=settings.inference_base_url, api_key=settings.inference_api_key)
         async for event in build_codebook(documents, client, settings.default_model):
             yield event
-            if event.startswith("data:"):
-                payload = json.loads(event[5:].strip())
-                if payload.get("type") == "done":
-                    codebook = payload.get("codebook", {})
-                    (sdir / "codebook.json").write_text(json.dumps(codebook))
-                    _persist_all_formats(codebook, sdir)
+            if (payload := parse_sse(event)) and payload.get("type") == "done":
+                codebook = payload.get("codebook", {})
+                (sdir / "codebook.json").write_text(json.dumps(codebook))
+                _persist_all_formats(codebook, sdir)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
 
@@ -82,12 +81,10 @@ async def build_from_guide(
         client = AsyncOpenAI(base_url=settings.inference_base_url, api_key=settings.inference_api_key)
         async for event in extract_codes_from_guide(guide_text, client, settings.default_model):
             yield event
-            if event.startswith("data:"):
-                payload = json.loads(event[5:].strip())
-                if payload.get("type") == "done":
-                    codebook = payload.get("codebook", {})
-                    (sdir / "codebook.json").write_text(json.dumps(codebook))
-                    _persist_all_formats(codebook, sdir)
+            if (payload := parse_sse(event)) and payload.get("type") == "done":
+                codebook = payload.get("codebook", {})
+                (sdir / "codebook.json").write_text(json.dumps(codebook))
+                _persist_all_formats(codebook, sdir)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
 

@@ -2,12 +2,14 @@
 
 import json
 
+import pandas as pd
 from fastapi import APIRouter, Cookie, HTTPException, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from toolkit.config import settings
+from toolkit.routers._sse import parse_sse
 from toolkit.services.coding import (
     build_themes,
     merge_coding_results,
@@ -56,20 +58,16 @@ async def run_coding(
         if body.approach in ("deductive", "hybrid"):
             async for event in run_deductive(chunks, codebook, client, model):
                 yield event
-                if event.startswith("data:"):
-                    payload = json.loads(event[5:].strip())
-                    if payload.get("type") == "deductive_done":
-                        deductive_results = payload["results"]
+                if (payload := parse_sse(event)) and payload.get("type") == "deductive_done":
+                    deductive_results = payload["results"]
 
         if body.approach in ("inductive", "hybrid"):
             existing = list(codebook.keys()) if codebook else []
             async for event in run_inductive(chunks, existing, client, model):
                 yield event
-                if event.startswith("data:"):
-                    payload = json.loads(event[5:].strip())
-                    if payload.get("type") == "inductive_done":
-                        inductive_results = payload["results"]
-                        inductive_codes = payload.get("discovered_codes", {})
+                if (payload := parse_sse(event)) and payload.get("type") == "inductive_done":
+                    inductive_results = payload["results"]
+                    inductive_codes = payload.get("discovered_codes", {})
 
         if not deductive_results:
             deductive_results = [
@@ -101,10 +99,7 @@ async def get_results(
     path = session_dir(sid) / "coded_data.json"
     if not path.exists():
         return []
-    import pandas as pd
-
-    df = pd.read_json(path)
-    return df.head(50).to_dict("records")
+    return pd.read_json(path).head(50).to_dict("records")
 
 
 @router.get("/download")
@@ -134,21 +129,16 @@ async def generate_themes(
     if not path.exists():
         raise HTTPException(400, "No coding results — run coding first")
 
-    import pandas as pd
-
     df = pd.read_json(path)
 
     async def stream():
         client = AsyncOpenAI(base_url=settings.inference_base_url, api_key=settings.inference_api_key)
-        themes_text = ""
         async for event in build_themes(df, client, settings.default_model):
             yield event
-            if event.startswith("data:"):
-                payload = json.loads(event[5:].strip())
-                if payload.get("type") == "done":
-                    themes_text = payload.get("themes", "")
-                    (sdir / "themes.txt").write_text(themes_text)
-                    save_themes_docx(themes_text, sdir)
+            if (payload := parse_sse(event)) and payload.get("type") == "done":
+                themes_text = payload.get("themes", "")
+                (sdir / "themes.txt").write_text(themes_text)
+                save_themes_docx(themes_text, sdir)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
 

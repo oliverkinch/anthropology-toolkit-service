@@ -35,7 +35,13 @@ class CodeEntry:
 # ---------------------------------------------------------------------------
 
 
+def _sanitize_label(raw: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9_]", "_", raw.strip())[:25].lower()
+
+
 def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP) -> list[str]:
+    if overlap >= chunk_size:
+        raise ValueError(f"overlap ({overlap}) must be less than chunk_size ({chunk_size})")
     words = text.split()
     chunks = []
     start = 0
@@ -46,6 +52,16 @@ def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP)
     return chunks
 
 
+def _buffered_progress() -> tuple[list[str], object]:
+    """Return (event_buffer, async progress callback) for use with _refine_codebook."""
+    events: list[str] = []
+
+    async def _cb(msg: str) -> None:
+        events.append(f"data: {json.dumps({'type': 'progress', 'message': msg})}\n\n")
+
+    return events, _cb
+
+
 # ---------------------------------------------------------------------------
 # LLM helpers
 # ---------------------------------------------------------------------------
@@ -53,8 +69,9 @@ def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = OVERLAP)
 
 def _clean_json(raw: str) -> str:
     raw = raw.strip()
-    raw = re.sub(r"^```(?:json)?", "", raw).rstrip("`").strip()
-    return raw
+    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
+    raw = re.sub(r"```\s*$", "", raw, flags=re.MULTILINE)
+    return raw.strip()
 
 
 async def _llm_json(client, model: str, prompt: str, max_tokens: int = 2000) -> list | dict:
@@ -154,8 +171,7 @@ async def _extract_codes_from_text(
             for item in items:
                 if not isinstance(item, dict):
                     continue
-                raw_label = str(item.get("label", "")).strip()
-                label = re.sub(r"[^a-zA-Z0-9_]", "_", raw_label)[:25].lower()
+                label = _sanitize_label(str(item.get("label", "")))
                 if not label:
                     continue
                 if label in entries:
@@ -253,7 +269,7 @@ async def _refine_codebook(
         try:
             result = await _llm_json(client, model, prompt, max_tokens=300)
             if isinstance(result, dict) and result.get("should_merge"):
-                new_label = re.sub(r"[^a-zA-Z0-9_]", "_", str(result.get("merged_label", label_a)))[:25].lower()
+                new_label = _sanitize_label(str(result.get("merged_label", label_a)))
                 new_def = result.get("merged_definition", e_a.definition)
 
                 # Build merged entry
@@ -279,7 +295,7 @@ async def _refine_codebook(
 
         await asyncio.sleep(0.3)
 
-    merges = len(merged_into) // 2
+    merges = sum(1 for v in merged_into.values() if v not in merged_into)
     await progress_cb(f"Refinement complete — {merges} merge(s) applied, {len(entries)} codes remaining.")
     return entries
 
@@ -317,11 +333,7 @@ async def build_codebook(
     pruned = {k: v for k, v in all_entries.items() if v.frequency >= min_frequency}
 
     # Refinement: deduplicate via embeddings + LLM merge
-    events: list[str] = []
-
-    async def _progress(msg: str) -> None:
-        events.append(f"data: {json.dumps({'type': 'progress', 'message': msg})}\n\n")
-
+    events, _progress = _buffered_progress()
     refined = await _refine_codebook(pruned, client, model, _progress)
     for ev in events:
         yield ev
@@ -344,11 +356,7 @@ async def extract_codes_from_guide(
     entries_list = await _extract_codes_from_text(guide_text, "interview_guide", client, model, "hybrid")
     entries = {e.label: e for e in entries_list}
 
-    events: list[str] = []
-
-    async def _progress(msg: str) -> None:
-        events.append(f"data: {json.dumps({'type': 'progress', 'message': msg})}\n\n")
-
+    events, _progress = _buffered_progress()
     refined = await _refine_codebook(entries, client, model, _progress, threshold=SIMILARITY_MERGE_THRESHOLD)
     for ev in events:
         yield ev
@@ -366,7 +374,7 @@ def parse_custom_codes(text: str) -> dict:
         for sep in (":", "—", "-"):
             if sep in line:
                 label, _, definition = line.partition(sep)
-                label = re.sub(r"[^a-zA-Z0-9_]", "_", label.strip())[:25].lower()
+                label = _sanitize_label(label)
                 if label:
                     codebook[label] = {
                         "label": label,
@@ -385,17 +393,17 @@ def load_codebook_csv(path: Path) -> dict:
     df = pd.read_csv(path)
     codebook = {}
     for _, row in df.iterrows():
-        label = str(row.get("code_label", row.get("label", ""))).strip()
+        label = _sanitize_label(str(row.get("code_label", row.get("label", ""))))
         if not label:
             continue
-        label = re.sub(r"[^a-zA-Z0-9_]", "_", label)[:25].lower()
+        examples = [v for col in ("example_1", "example_2") if (v := str(row.get(col, "") or "")) not in ("", "nan")]
         codebook[label] = {
             "label": label,
-            "definition": str(row.get("definition", "")),
-            "inclusion_criteria": [str(row.get("inclusion_criteria", ""))] if row.get("inclusion_criteria") else [],
-            "exclusion_criteria": [str(row.get("exclusion_criteria", ""))] if row.get("exclusion_criteria") else [],
-            "examples": [str(row.get("example_1", "")), str(row.get("example_2", ""))],
-            "frequency": int(row.get("frequency", 1)),
+            "definition": str(row.get("definition", "") or ""),
+            "inclusion_criteria": [str(row["inclusion_criteria"])] if pd.notna(row.get("inclusion_criteria")) else [],
+            "exclusion_criteria": [str(row["exclusion_criteria"])] if pd.notna(row.get("exclusion_criteria")) else [],
+            "examples": examples,
+            "frequency": int(row.get("frequency", 1) or 1),
             "source_documents": [],
         }
     return codebook
