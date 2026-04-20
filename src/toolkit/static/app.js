@@ -53,7 +53,16 @@ function app() {
     // ----------------------------------------------------------------
     async loadUploads() {
       const res = await fetch('/api/upload')
-      if (res.ok) this.uploads = await res.json()
+      if (res.ok) {
+        const data = await res.json()
+        const seen = new Set()
+        this.uploads = data.filter(u => {
+          const key = u.role + '::' + u.filename
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
+      }
     },
 
     handleFileInput(event, role) {
@@ -65,6 +74,13 @@ function app() {
     handleDrop(event, role) {
       for (const file of event.dataTransfer.files) {
         this.uploadFile(file, role)
+      }
+    },
+
+    async deleteUpload(role, filename) {
+      const res = await fetch(`/api/upload/${role}/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+      if (res.ok) {
+        this.uploads = this.uploads.filter(u => !(u.role === role && u.filename === filename))
       }
     },
 
