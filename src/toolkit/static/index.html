@@ -290,7 +290,7 @@
             <span x-show="!codeRunning">Run Coding</span>
             <span x-show="codeRunning">Running…</span>
           </button>
-          <a x-show="codedRows.length > 0" href="/api/code/download" class="btn-secondary">Download Excel</a>
+          <a x-show="codingDone" href="/api/code/download" class="btn-secondary">Download Excel</a>
         </div>
         <div x-show="codeLog.length" class="log-box mt-3">
           <template x-for="line in codeLog" :key="line"><div x-text="line"></div></template>
