@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     inference_base_url: str = "https://inference.projects.alexandrainst.dk/v1"
     inference_api_key: str = "sk-..."
     default_model: str = "qwen-235b"
+    llm_concurrency: int = 50
     host: str = "0.0.0.0"
     port: int = 8080
 

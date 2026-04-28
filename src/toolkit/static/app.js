@@ -108,7 +108,7 @@ function app() {
       try {
         const es = await this._ssePost('/api/chunk', this.chunkOpts)
         es.onmessage = (e) => {
-          const payload = JSON.parse(e.data)
+          const payload = JSON.parse(e.data || '{}')
           if (payload.type === 'progress') {
             this.chunkLog.push(payload.message)
           } else if (payload.type === 'done') {
@@ -156,7 +156,7 @@ function app() {
       this.codebookLog = ['Extracting codes from interview guide…']
       const es = await this._ssePost('/api/codebook/from-guide', {})
       es.onmessage = async (e) => {
-        const payload = JSON.parse(e.data)
+        const payload = JSON.parse(e.data || '{}')
         if (payload.type === 'progress') this.codebookLog.push(payload.message)
         if (payload.type === 'done') {
           this.codebookLog.push(`✓ Extracted ${Object.keys(payload.codebook || {}).length} codes`)
@@ -173,7 +173,7 @@ function app() {
       this.codebookLog = ['Building codebook from literature…']
       const es = await this._ssePost('/api/codebook/build', {})
       es.onmessage = async (e) => {
-        const payload = JSON.parse(e.data)
+        const payload = JSON.parse(e.data || '{}')
         if (payload.type === 'progress') this.codebookLog.push(payload.message)
         if (payload.type === 'done') {
           this.codebookLog.push(`✓ Built ${Object.keys(payload.codebook || {}).length} codes`)
@@ -212,7 +212,7 @@ function app() {
       this.codedRows = []
       const es = await this._ssePost('/api/code', { approach: this.approach })
       es.onmessage = (e) => {
-        const payload = JSON.parse(e.data)
+        const payload = JSON.parse(e.data || '{}')
         if (payload.type === 'progress') this.codeLog.push(payload.message)
         if (payload.type === 'deductive_done') this.codeLog.push(`✓ Deductive coding complete`)
         if (payload.type === 'inductive_done') this.codeLog.push(`✓ Inductive coding complete`)
@@ -248,7 +248,7 @@ function app() {
       this.themes = ''
       const es = await this._ssePost('/api/code/themes', {})
       es.onmessage = (e) => {
-        const payload = JSON.parse(e.data)
+        const payload = JSON.parse(e.data || '{}')
         if (payload.type === 'progress') this.themeLog.push(payload.message)
         if (payload.type === 'done') {
           this.themes = payload.themes || ''
