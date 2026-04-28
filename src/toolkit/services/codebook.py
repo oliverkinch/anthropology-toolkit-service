@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 CHUNK_SIZE = 500  # words
 OVERLAP = 50
 SIMILARITY_MERGE_THRESHOLD = 0.85
+LLM_CONCURRENCY = 10  # max simultaneous LLM calls
 
 
 @dataclass
@@ -102,11 +103,13 @@ async def _extract_codes_from_text(
     client,
     model: str,
     coding_strategy: str = "hybrid",
+    sem: asyncio.Semaphore | None = None,
 ) -> list[CodeEntry]:
     chunks = _chunk_text(text)
-    entries: dict[str, CodeEntry] = {}
+    if sem is None:
+        sem = asyncio.Semaphore(LLM_CONCURRENCY)
 
-    for i, chunk in enumerate(chunks):
+    async def _process_chunk(i: int, chunk: str) -> list[dict]:
         if coding_strategy == "inductive":
             prompt = (
                 "Using inductive coding, extract potential codes from the provided text.\n"
@@ -163,36 +166,39 @@ async def _extract_codes_from_text(
                 '[{"label": "code_name", "definition": "...", "code_type": "deductive", '
                 '"example": "...", "inclusion": "...", "exclusion": "..."}]'
             )
-
         try:
-            items = await _llm_json(client, model, prompt)
-            if not isinstance(items, list):
-                items = []
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                label = _sanitize_label(str(item.get("label", "")))
-                if not label:
-                    continue
-                if label in entries:
-                    entries[label].frequency += 1
-                    ex = item.get("example", "")
-                    if ex and ex not in entries[label].examples:
-                        entries[label].examples.append(ex)
-                else:
-                    entries[label] = CodeEntry(
-                        label=label,
-                        definition=item.get("definition", ""),
-                        inclusion_criteria=[item.get("inclusion", "")] if item.get("inclusion") else [],
-                        exclusion_criteria=[item.get("exclusion", "")] if item.get("exclusion") else [],
-                        examples=[item.get("example", "")] if item.get("example") else [],
-                        frequency=1,
-                        source_documents=[doc_name],
-                    )
+            async with sem:
+                items = await _llm_json(client, model, prompt)
+            return items if isinstance(items, list) else []
         except Exception as e:
             logger.warning("Code extraction failed on chunk %d of %s: %s", i, doc_name, e)
+            return []
 
-        await asyncio.sleep(0.5)
+    results = await asyncio.gather(*[_process_chunk(i, c) for i, c in enumerate(chunks)])
+
+    entries: dict[str, CodeEntry] = {}
+    for items in results:
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            label = _sanitize_label(str(item.get("label", "")))
+            if not label:
+                continue
+            if label in entries:
+                entries[label].frequency += 1
+                ex = item.get("example", "")
+                if ex and ex not in entries[label].examples:
+                    entries[label].examples.append(ex)
+            else:
+                entries[label] = CodeEntry(
+                    label=label,
+                    definition=item.get("definition", ""),
+                    inclusion_criteria=[item.get("inclusion", "")] if item.get("inclusion") else [],
+                    exclusion_criteria=[item.get("exclusion", "")] if item.get("exclusion") else [],
+                    examples=[item.get("example", "")] if item.get("example") else [],
+                    frequency=1,
+                    source_documents=[doc_name],
+                )
 
     return list(entries.values())
 
@@ -208,10 +214,14 @@ async def _refine_codebook(
     model: str,
     progress_cb,  # async callable(msg: str)
     threshold: float = SIMILARITY_MERGE_THRESHOLD,
+    sem: asyncio.Semaphore | None = None,
 ) -> dict[str, CodeEntry]:
     """Find near-duplicate codes, ask LLM whether to merge each pair."""
     if len(entries) < 2:
         return entries
+
+    if sem is None:
+        sem = asyncio.Semaphore(LLM_CONCURRENCY)
 
     await progress_cb("Computing code embeddings for deduplication...")
 
@@ -236,18 +246,13 @@ async def _refine_codebook(
 
     await progress_cb(f"Evaluating {len(to_merge)} potential merge(s)...")
 
-    merged_into: dict[str, str] = {}  # label → canonical label it was merged into
-
-    for label_a, label_b, sim in to_merge:
-        # Skip if either was already merged away
-        if label_a in merged_into or label_b in merged_into:
-            continue
-
-        e_a = entries[label_a]
-        e_b = entries[label_b]
+    async def _eval_pair(label_a: str, label_b: str, sim: float) -> tuple[str, str, dict | None]:
+        e_a = entries.get(label_a)
+        e_b = entries.get(label_b)
+        if e_a is None or e_b is None:
+            return label_a, label_b, None
         ex_a = e_a.examples[0] if e_a.examples else ""
         ex_b = e_b.examples[0] if e_b.examples else ""
-
         prompt = (
             f"Evaluate whether these two qualitative codes should be merged.\n\n"
             f"Similarity score: {sim:.2f}\n\n"
@@ -265,35 +270,43 @@ async def _refine_codebook(
             '{"should_merge": true, "rationale": "...", '
             '"merged_label": "suggested_label", "merged_definition": "comprehensive definition"}'
         )
-
         try:
-            result = await _llm_json(client, model, prompt, max_tokens=300)
-            if isinstance(result, dict) and result.get("should_merge"):
-                new_label = _sanitize_label(str(result.get("merged_label", label_a)))
-                new_def = result.get("merged_definition", e_a.definition)
-
-                # Build merged entry
-                merged = CodeEntry(
-                    label=new_label,
-                    definition=new_def,
-                    inclusion_criteria=e_a.inclusion_criteria + e_b.inclusion_criteria,
-                    exclusion_criteria=e_a.exclusion_criteria + e_b.exclusion_criteria,
-                    examples=(e_a.examples + e_b.examples)[:4],
-                    frequency=e_a.frequency + e_b.frequency,
-                    source_documents=list(set(e_a.source_documents + e_b.source_documents)),
-                )
-
-                # Remove old, add merged
-                entries.pop(label_a, None)
-                entries.pop(label_b, None)
-                entries[new_label] = merged
-                merged_into[label_a] = new_label
-                merged_into[label_b] = new_label
-                logger.info("Merged %s + %s → %s", label_a, label_b, new_label)
+            async with sem:
+                result = await _llm_json(client, model, prompt, max_tokens=300)
+            return label_a, label_b, result if isinstance(result, dict) else None
         except Exception as e:
             logger.warning("Merge evaluation failed for %s/%s: %s", label_a, label_b, e)
+            return label_a, label_b, None
 
-        await asyncio.sleep(0.3)
+    decisions = await asyncio.gather(*[_eval_pair(a, b, s) for a, b, s in to_merge])
+
+    # Apply merge decisions sequentially to correctly track merged_into
+    merged_into: dict[str, str] = {}
+    for label_a, label_b, result in decisions:
+        if label_a in merged_into or label_b in merged_into:
+            continue
+        if result and result.get("should_merge"):
+            e_a = entries.get(label_a)
+            e_b = entries.get(label_b)
+            if e_a is None or e_b is None:
+                continue
+            new_label = _sanitize_label(str(result.get("merged_label", label_a)))
+            new_def = result.get("merged_definition", e_a.definition)
+            merged = CodeEntry(
+                label=new_label,
+                definition=new_def,
+                inclusion_criteria=e_a.inclusion_criteria + e_b.inclusion_criteria,
+                exclusion_criteria=e_a.exclusion_criteria + e_b.exclusion_criteria,
+                examples=(e_a.examples + e_b.examples)[:4],
+                frequency=e_a.frequency + e_b.frequency,
+                source_documents=list(set(e_a.source_documents + e_b.source_documents)),
+            )
+            entries.pop(label_a, None)
+            entries.pop(label_b, None)
+            entries[new_label] = merged
+            merged_into[label_a] = new_label
+            merged_into[label_b] = new_label
+            logger.info("Merged %s + %s → %s", label_a, label_b, new_label)
 
     merges = sum(1 for v in merged_into.values() if v not in merged_into)
     await progress_cb(f"Refinement complete — {merges} merge(s) applied, {len(entries)} codes remaining.")
@@ -314,6 +327,7 @@ async def build_codebook(
     min_frequency: int = 2,
 ) -> AsyncIterator[str]:
     """Yield SSE events, finish with done+codebook."""
+    sem = asyncio.Semaphore(LLM_CONCURRENCY)
     all_entries: dict[str, CodeEntry] = {}
     total = len(documents)
 
@@ -321,7 +335,7 @@ async def build_codebook(
         yield f"data: {json.dumps({'type': 'progress', 'message': f'Extracting codes from {name} ({idx + 1}/{total})...'})}\n\n"
         await asyncio.sleep(0)
 
-        entries = await _extract_codes_from_text(text, name, client, model, coding_strategy)
+        entries = await _extract_codes_from_text(text, name, client, model, coding_strategy, sem)
         for e in entries:
             if e.label in all_entries:
                 all_entries[e.label].frequency += e.frequency
@@ -334,7 +348,7 @@ async def build_codebook(
 
     # Refinement: deduplicate via embeddings + LLM merge
     events, _progress = _buffered_progress()
-    refined = await _refine_codebook(pruned, client, model, _progress)
+    refined = await _refine_codebook(pruned, client, model, _progress, sem=sem)
     for ev in events:
         yield ev
 
@@ -350,14 +364,15 @@ async def extract_codes_from_guide(
     model: str,
 ) -> AsyncIterator[str]:
     """Extract deductive codes from an interview guide."""
+    sem = asyncio.Semaphore(LLM_CONCURRENCY)
     yield f"data: {json.dumps({'type': 'progress', 'message': 'Extracting codes from interview guide...'})}\n\n"
     await asyncio.sleep(0)
 
-    entries_list = await _extract_codes_from_text(guide_text, "interview_guide", client, model, "hybrid")
+    entries_list = await _extract_codes_from_text(guide_text, "interview_guide", client, model, "hybrid", sem)
     entries = {e.label: e for e in entries_list}
 
     events, _progress = _buffered_progress()
-    refined = await _refine_codebook(entries, client, model, _progress, threshold=SIMILARITY_MERGE_THRESHOLD)
+    refined = await _refine_codebook(entries, client, model, _progress, threshold=SIMILARITY_MERGE_THRESHOLD, sem=sem)
     for ev in events:
         yield ev
 
