@@ -28,6 +28,7 @@ uv sync
 INFERENCE_BASE_URL=https://inference.projects.alexandrainst.dk/v1
 INFERENCE_API_KEY=sk-...
 DEFAULT_MODEL=qwen-235b
+LLM_CONCURRENCY=50
 ```
 
 ## Run
