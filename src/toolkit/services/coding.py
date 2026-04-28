@@ -12,7 +12,11 @@ from pathlib import Path
 import nltk
 import pandas as pd
 
+from toolkit.config import settings
+
 logger = logging.getLogger(__name__)
+
+LLM_CONCURRENCY = settings.llm_concurrency
 
 
 # ---------------------------------------------------------------------------
@@ -67,14 +71,14 @@ async def run_deductive(
     )
     valid_labels = set(codebook.keys())
     total = len(chunks)
-    results = []
+    logger.info("Deductive coding started with llm_concurrency=%d", LLM_CONCURRENCY)
+    sem = asyncio.Semaphore(LLM_CONCURRENCY)
+    results_by_index: list[dict | None] = [None] * total
 
-    for i, chunk in enumerate(chunks):
-        if (i + 1) % 10 == 0 or i == 0:
-            yield f"data: {json.dumps({'type': 'progress', 'message': f'Deductive coding chunk {i + 1}/{total}...'})}\n\n"
-
+    async def _code_chunk(i: int, chunk: dict) -> tuple[int, dict]:
         try:
-            raw = await _llm_text(client, model, system, chunk["text"], max_tokens=150)
+            async with sem:
+                raw = await _llm_text(client, model, system, chunk["text"], max_tokens=150)
             if raw.upper() == "NO_CODES":
                 codes = []
             else:
@@ -83,8 +87,17 @@ async def run_deductive(
             logger.warning("Deductive coding failed for chunk %d: %s", i, e)
             codes = []
 
-        results.append({"chunk_id": chunk.get("chunk_id", i + 1), "deductive_codes": codes})
+        return i, {"chunk_id": chunk.get("chunk_id", i + 1), "deductive_codes": codes}
+
+    tasks = [asyncio.create_task(_code_chunk(i, chunk)) for i, chunk in enumerate(chunks)]
+    for completed, done_task in enumerate(asyncio.as_completed(tasks), start=1):
+        i, result = await done_task
+        results_by_index[i] = result
+        if completed % 10 == 0 or completed == 1 or completed == total:
+            yield f"data: {json.dumps({'type': 'progress', 'message': f'Deductive coding chunk {completed}/{total}...'})}\n\n"
         await asyncio.sleep(0)
+
+    results = [r for r in results_by_index if r is not None]
 
     yield f"data: {json.dumps({'type': 'deductive_done', 'results': results})}\n\n"
 
@@ -105,8 +118,8 @@ def _filter_novel_codes(inductive_codes: dict, existing_labels: list[str], thres
         ind_texts = [f"{k} {v.get('definition', '')}" for k, v in inductive_codes.items()]
         ded_texts = existing_labels  # label strings are enough
 
-        ind_emb = st_model.encode(ind_texts, show_progress_bar=False)
-        ded_emb = st_model.encode(ded_texts, show_progress_bar=False)
+        ind_emb = st_model.encode(ind_texts, show_progress_bar=False, convert_to_numpy=True)
+        ded_emb = st_model.encode(ded_texts, show_progress_bar=False, convert_to_numpy=True)
         sims = cosine_similarity(ind_emb, ded_emb)  # (n_ind, n_ded)
 
         novel = {}
@@ -192,12 +205,14 @@ async def run_inductive(
             "Return ONLY the code names."
         )
         total = len(chunks)
-        ind_results = []
-        for i, chunk in enumerate(chunks):
-            if (i + 1) % 10 == 0 or i == 0:
-                yield f"data: {json.dumps({'type': 'progress', 'message': f'Inductive coding chunk {i + 1}/{total}...'})}\n\n"
+        logger.info("Inductive coding started with llm_concurrency=%d", LLM_CONCURRENCY)
+        sem = asyncio.Semaphore(LLM_CONCURRENCY)
+        ind_results_by_index: list[dict | None] = [None] * total
+
+        async def _apply_inductive(i: int, chunk: dict) -> tuple[int, dict]:
             try:
-                raw = await _llm_text(client, model, ind_system, chunk["text"], max_tokens=100)
+                async with sem:
+                    raw = await _llm_text(client, model, ind_system, chunk["text"], max_tokens=100)
                 if raw.upper() == "NONE":
                     codes = []
                 else:
@@ -205,8 +220,17 @@ async def run_inductive(
             except Exception as e:
                 logger.warning("Inductive application failed for chunk %d: %s", i, e)
                 codes = []
-            ind_results.append({"chunk_id": chunk.get("chunk_id", i + 1), "inductive_codes": codes})
+            return i, {"chunk_id": chunk.get("chunk_id", i + 1), "inductive_codes": codes}
+
+        tasks = [asyncio.create_task(_apply_inductive(i, chunk)) for i, chunk in enumerate(chunks)]
+        for completed, done_task in enumerate(asyncio.as_completed(tasks), start=1):
+            i, result = await done_task
+            ind_results_by_index[i] = result
+            if completed % 10 == 0 or completed == 1 or completed == total:
+                yield f"data: {json.dumps({'type': 'progress', 'message': f'Inductive coding chunk {completed}/{total}...'})}\n\n"
             await asyncio.sleep(0)
+
+        ind_results = [r for r in ind_results_by_index if r is not None]
     else:
         ind_results = [{"chunk_id": c.get("chunk_id", i + 1), "inductive_codes": []} for i, c in enumerate(chunks)]
 
@@ -494,5 +518,5 @@ def save_themes_docx(themes_text: str, session_path: Path) -> Path:
             doc.add_paragraph(line)
 
     out = session_path / "themes_report.docx"
-    doc.save(out)
+    doc.save(str(out))
     return out

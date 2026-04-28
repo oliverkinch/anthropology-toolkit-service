@@ -11,12 +11,14 @@ from pathlib import Path
 
 import pandas as pd
 
+from toolkit.config import settings
+
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 500  # words
 OVERLAP = 50
 SIMILARITY_MERGE_THRESHOLD = 0.85
-LLM_CONCURRENCY = 10  # max simultaneous LLM calls
+LLM_CONCURRENCY = settings.llm_concurrency  # max simultaneous LLM calls
 
 
 @dataclass
@@ -231,7 +233,7 @@ async def _refine_codebook(
     st_model = SentenceTransformer("all-MiniLM-L6-v2")
     labels = list(entries.keys())
     texts = [f"{e.label} {e.definition}" for e in entries.values()]
-    embeddings = st_model.encode(texts, show_progress_bar=False)
+    embeddings = st_model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
 
     sims = cosine_similarity(embeddings)
     to_merge: list[tuple[str, str, float]] = []
@@ -308,7 +310,7 @@ async def _refine_codebook(
             merged_into[label_b] = new_label
             logger.info("Merged %s + %s → %s", label_a, label_b, new_label)
 
-    merges = sum(1 for v in merged_into.values() if v not in merged_into)
+    merges = len(set(merged_into.values()))
     await progress_cb(f"Refinement complete — {merges} merge(s) applied, {len(entries)} codes remaining.")
     return entries
 
@@ -327,15 +329,24 @@ async def build_codebook(
     min_frequency: int = 2,
 ) -> AsyncIterator[str]:
     """Yield SSE events, finish with done+codebook."""
+    logger.info("Codebook build started with llm_concurrency=%d", LLM_CONCURRENCY)
     sem = asyncio.Semaphore(LLM_CONCURRENCY)
     all_entries: dict[str, CodeEntry] = {}
     total = len(documents)
 
-    for idx, (name, text) in enumerate(documents.items()):
-        yield f"data: {json.dumps({'type': 'progress', 'message': f'Extracting codes from {name} ({idx + 1}/{total})...'})}\n\n"
+    async def _extract_doc(name: str, text: str) -> tuple[str, list[CodeEntry]]:
+        entries = await _extract_codes_from_text(text, name, client, model, coding_strategy, sem)
+        return name, entries
+
+    tasks = [asyncio.create_task(_extract_doc(name, text)) for name, text in documents.items()]
+    for idx, name in enumerate(documents.keys(), start=1):
+        yield f"data: {json.dumps({'type': 'progress', 'message': f'Queued extraction for {name} ({idx}/{total})...'})}\n\n"
+
+    for completed, done_task in enumerate(asyncio.as_completed(tasks), start=1):
+        name, entries = await done_task
+        yield f"data: {json.dumps({'type': 'progress', 'message': f'Completed extraction for {name} ({completed}/{total})...'})}\n\n"
         await asyncio.sleep(0)
 
-        entries = await _extract_codes_from_text(text, name, client, model, coding_strategy, sem)
         for e in entries:
             if e.label in all_entries:
                 all_entries[e.label].frequency += e.frequency
@@ -364,6 +375,7 @@ async def extract_codes_from_guide(
     model: str,
 ) -> AsyncIterator[str]:
     """Extract deductive codes from an interview guide."""
+    logger.info("Guide code extraction started with llm_concurrency=%d", LLM_CONCURRENCY)
     sem = asyncio.Semaphore(LLM_CONCURRENCY)
     yield f"data: {json.dumps({'type': 'progress', 'message': 'Extracting codes from interview guide...'})}\n\n"
     await asyncio.sleep(0)
