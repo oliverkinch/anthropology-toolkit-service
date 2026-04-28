@@ -5,6 +5,7 @@ import datetime
 import json
 import logging
 import re
+import time
 from collections import Counter
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -71,7 +72,8 @@ async def run_deductive(
     )
     valid_labels = set(codebook.keys())
     total = len(chunks)
-    logger.info("Deductive coding started with llm_concurrency=%d", LLM_CONCURRENCY)
+    t0 = time.perf_counter()
+    logger.info("Deductive coding started: %d chunks, llm_concurrency=%d", total, LLM_CONCURRENCY)
     sem = asyncio.Semaphore(LLM_CONCURRENCY)
     results_by_index: list[dict | None] = [None] * total
 
@@ -98,6 +100,12 @@ async def run_deductive(
         await asyncio.sleep(0)
 
     results = [r for r in results_by_index if r is not None]
+    logger.info(
+        "Deductive coding done: %.1fs for %d chunks (%.2fs/chunk)",
+        time.perf_counter() - t0,
+        total,
+        (time.perf_counter() - t0) / max(total, 1),
+    )
 
     yield f"data: {json.dumps({'type': 'deductive_done', 'results': results})}\n\n"
 
@@ -205,7 +213,8 @@ async def run_inductive(
             "Return ONLY the code names."
         )
         total = len(chunks)
-        logger.info("Inductive coding started with llm_concurrency=%d", LLM_CONCURRENCY)
+        t_ind = time.perf_counter()
+        logger.info("Inductive coding started: %d chunks, llm_concurrency=%d", total, LLM_CONCURRENCY)
         sem = asyncio.Semaphore(LLM_CONCURRENCY)
         ind_results_by_index: list[dict | None] = [None] * total
 
@@ -231,6 +240,12 @@ async def run_inductive(
             await asyncio.sleep(0)
 
         ind_results = [r for r in ind_results_by_index if r is not None]
+        logger.info(
+            "Inductive coding done: %.1fs for %d chunks (%.2fs/chunk)",
+            time.perf_counter() - t_ind,
+            total,
+            (time.perf_counter() - t_ind) / max(total, 1),
+        )
     else:
         ind_results = [{"chunk_id": c.get("chunk_id", i + 1), "inductive_codes": []} for i, c in enumerate(chunks)]
 

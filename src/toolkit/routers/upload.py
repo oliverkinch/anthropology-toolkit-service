@@ -38,7 +38,7 @@ async def upload_file(
 
     role_dir = sdir / role
     role_dir.mkdir(exist_ok=True)
-    dest = role_dir / (file.filename or "upload")
+    dest = role_dir / Path(file.filename or "upload").name
     with dest.open("wb") as f:
         shutil.copyfileobj(file.file, f)
 

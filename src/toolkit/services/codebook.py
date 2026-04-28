@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -329,7 +330,8 @@ async def build_codebook(
     min_frequency: int = 2,
 ) -> AsyncIterator[str]:
     """Yield SSE events, finish with done+codebook."""
-    logger.info("Codebook build started with llm_concurrency=%d", LLM_CONCURRENCY)
+    t0 = time.perf_counter()
+    logger.info("Codebook build started: %d document(s), llm_concurrency=%d", len(documents), LLM_CONCURRENCY)
     sem = asyncio.Semaphore(LLM_CONCURRENCY)
     all_entries: dict[str, CodeEntry] = {}
     total = len(documents)
@@ -342,6 +344,7 @@ async def build_codebook(
     for idx, name in enumerate(documents.keys(), start=1):
         yield f"data: {json.dumps({'type': 'progress', 'message': f'Queued extraction for {name} ({idx}/{total})...'})}\n\n"
 
+    t_extract = time.perf_counter()
     for completed, done_task in enumerate(asyncio.as_completed(tasks), start=1):
         name, entries = await done_task
         yield f"data: {json.dumps({'type': 'progress', 'message': f'Completed extraction for {name} ({completed}/{total})...'})}\n\n"
@@ -354,18 +357,24 @@ async def build_codebook(
             else:
                 all_entries[e.label] = e
 
+    logger.info("Extraction phase done: %.1fs, %d raw codes", time.perf_counter() - t_extract, len(all_entries))
+
     # Prune rare codes
     pruned = {k: v for k, v in all_entries.items() if v.frequency >= min_frequency}
 
     # Refinement: deduplicate via embeddings + LLM merge
+    t_refine = time.perf_counter()
     events, _progress = _buffered_progress()
     refined = await _refine_codebook(pruned, client, model, _progress, sem=sem)
     for ev in events:
         yield ev
 
+    logger.info("Refinement phase done: %.1fs, %d codes remaining", time.perf_counter() - t_refine, len(refined))
+
     # Limit to max_codes by frequency
     codebook = dict(sorted(refined.items(), key=lambda x: -x[1].frequency)[:max_codes])
 
+    logger.info("Codebook build complete: %.1fs total, %d final codes", time.perf_counter() - t0, len(codebook))
     yield f"data: {json.dumps({'type': 'done', 'codebook': _codebook_to_dict(codebook)})}\n\n"
 
 
@@ -375,19 +384,22 @@ async def extract_codes_from_guide(
     model: str,
 ) -> AsyncIterator[str]:
     """Extract deductive codes from an interview guide."""
-    logger.info("Guide code extraction started with llm_concurrency=%d", LLM_CONCURRENCY)
+    t0 = time.perf_counter()
+    logger.info("Guide extraction started: llm_concurrency=%d", LLM_CONCURRENCY)
     sem = asyncio.Semaphore(LLM_CONCURRENCY)
     yield f"data: {json.dumps({'type': 'progress', 'message': 'Extracting codes from interview guide...'})}\n\n"
     await asyncio.sleep(0)
 
     entries_list = await _extract_codes_from_text(guide_text, "interview_guide", client, model, "hybrid", sem)
     entries = {e.label: e for e in entries_list}
+    logger.info("Guide extraction done: %.1fs, %d codes", time.perf_counter() - t0, len(entries))
 
     events, _progress = _buffered_progress()
     refined = await _refine_codebook(entries, client, model, _progress, threshold=SIMILARITY_MERGE_THRESHOLD, sem=sem)
     for ev in events:
         yield ev
 
+    logger.info("Guide refinement done: %.1fs total, %d final codes", time.perf_counter() - t0, len(refined))
     yield f"data: {json.dumps({'type': 'done', 'codebook': _codebook_to_dict(refined)})}\n\n"
 
 

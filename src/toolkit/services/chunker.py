@@ -4,13 +4,18 @@ import asyncio
 import json
 import logging
 import re
+import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import nltk
 import pandas as pd
 
+from toolkit.config import settings
+
 logger = logging.getLogger(__name__)
+
+LLM_CONCURRENCY = settings.llm_concurrency
 
 # Download sentence tokenizer on first use
 _nltk_ready = False
@@ -88,16 +93,16 @@ async def chunk_with_llm(
 ) -> AsyncIterator[str]:
     """Yield SSE-style progress lines, then final JSON."""
     BATCH = 30
-    chunks: list[dict] = []
     total_batches = max(1, len(sentences) // BATCH + (1 if len(sentences) % BATCH else 0))
+    logger.info("LLM chunking started: %d batch(es), llm_concurrency=%d", total_batches, LLM_CONCURRENCY)
+    t0 = time.perf_counter()
+    sem = asyncio.Semaphore(LLM_CONCURRENCY)
 
-    for batch_idx in range(0, len(sentences), BATCH):
-        batch = sentences[batch_idx : batch_idx + BATCH]
+    batches = [sentences[batch_idx : batch_idx + BATCH] for batch_idx in range(0, len(sentences), BATCH)]
+    chunks_by_batch: list[list[dict] | None] = [None] * len(batches)
+
+    async def _process_batch(batch_num: int, batch: list[dict]) -> tuple[int, list[dict]]:
         batch_text = "\n".join(s["text"] for s in batch)
-        batch_num = batch_idx // BATCH + 1
-
-        yield f"data: {json.dumps({'type': 'progress', 'message': f'Chunking batch {batch_num}/{total_batches}...'})}\n\n"
-
         prompt = (
             f"Please analyze this interview transcript and break it into semantically coherent chunks. Each chunk should:\n\n"
             f"1. Contain at most {max_chunk_sentences} sentences\n"
@@ -109,30 +114,41 @@ async def chunk_with_llm(
         )
 
         try:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.2,
-                max_tokens=4096,
-            )
+            async with sem:
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.2,
+                    max_tokens=4096,
+                )
             raw = response.choices[0].message.content or ""
             parts = raw.split("---CHUNK_BREAK---")
         except Exception as e:
-            logger.warning("LLM chunking batch %d failed: %s — falling back", batch_num, e)
+            logger.warning("LLM chunking batch %d failed: %s — falling back", batch_num + 1, e)
             parts = [
                 " ".join(s["text"] for s in batch[i : i + max_chunk_sentences])
                 for i in range(0, len(batch), max_chunk_sentences)
             ]
 
+        batch_chunks: list[dict] = []
         for part in parts:
             text = part.strip()
             if text:
-                # infer speaker from first line
                 first_speaker = batch[0]["speaker"] if batch else None
-                chunks.append({"text": text, "speaker": first_speaker})
+                batch_chunks.append({"text": text, "speaker": first_speaker})
+        return batch_num, batch_chunks
 
-        await asyncio.sleep(0)  # yield control
+    tasks = [asyncio.create_task(_process_batch(batch_num, batch)) for batch_num, batch in enumerate(batches)]
+    for completed, done_task in enumerate(asyncio.as_completed(tasks), start=1):
+        batch_num, batch_chunks = await done_task
+        chunks_by_batch[batch_num] = batch_chunks
+        yield f"data: {json.dumps({'type': 'progress', 'message': f'Chunked batch {completed}/{total_batches}...'})}\n\n"
+        await asyncio.sleep(0)
 
+    chunks: list[dict] = [chunk for batch_chunks in chunks_by_batch if batch_chunks for chunk in batch_chunks]
+
+    elapsed = time.perf_counter() - t0
+    logger.info("LLM chunking done: %d chunks in %.1fs (%.2fs/batch)", len(chunks), elapsed, elapsed / total_batches)
     yield f"data: {json.dumps({'type': 'done', 'chunks': chunks})}\n\n"
 
 
@@ -161,7 +177,7 @@ async def chunk_with_embeddings(
     yield f"data: {json.dumps({'type': 'progress', 'message': 'Computing embeddings...'})}\n\n"
     await asyncio.sleep(0)
 
-    embeddings = st_model.encode(texts, show_progress_bar=False)
+    embeddings = st_model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
 
     chunks: list[dict] = []
     current: list[int] = []
@@ -198,6 +214,7 @@ def _make_chunk(indices: list[int], sentences: list[dict]) -> dict:
 
 
 def chunks_to_df(chunks: list[dict]) -> pd.DataFrame:
+    _ensure_nltk()
     rows = []
     for i, c in enumerate(chunks):
         rows.append(
